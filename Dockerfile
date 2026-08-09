@@ -11,6 +11,9 @@ COPY . .
 
 # This service will clone arbitrary repos off the internet on Day 3.
 # Root is a poor default anywhere; here it's a genuinely bad idea.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+    
 RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser
 
