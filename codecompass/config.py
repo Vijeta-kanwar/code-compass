@@ -17,6 +17,17 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 768
     log_level: str = "INFO"
 
+    #Repo settings
+    clone_dir: str = "/tmp/codecompass"
+    allowed_git_hosts: str = "github.com,gitlab.com"
+    clone_timeout_seconds: int = 300
+    max_repo_mb: int = 200
+    max_file_bytes: int = 1_000_000      # skip minified bundles and vendored blobs
+
+    @property
+    def git_host_allowlist(self) -> set[str]:
+        return {h.strip().lower() for h in self.allowed_git_hosts.split(",") if h.strip()}
+
 @lru_cache
 def get_settings() -> Settings:
     # Cached so the file is parsed once per process, and so tests can point at
