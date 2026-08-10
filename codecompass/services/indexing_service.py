@@ -8,15 +8,14 @@ from codecompass.config import get_settings
 from codecompass.db import SessionLocal
 from codecompass.ingestion.git_clone import CloneFailed, shallow_clone
 from codecompass.ingestion.walker import walk_python_files
-from codecompass.models import IndexingJob, Repository
+from codecompass.models import Chunk, IndexingJob, Repository
+from codecompass.parsing.chunker import chunk_python_file
 from codecompass.repositories.file_store import FileStore
+
 
 logger = logging.getLogger(__name__)
 
 
-def chunk_file(content: str, path: str) -> list:
-    """Placeholder — Day 4 fills this in. Returning [] keeps the pipeline runnable."""
-    return []
 
 
 def run_indexing_job(job_id: uuid.UUID, repository_id: uuid.UUID) -> None:
@@ -55,32 +54,50 @@ def run_indexing_job(job_id: uuid.UUID, repository_id: uuid.UUID) -> None:
         store = FileStore(session)
         known_hashes = store.hashes_for_repository(repository_id)
         seen_paths: set[str] = set()
-
+        
         for walked in walk_python_files(clone_path):
             seen_paths.add(walked.path)
             job.files_seen += 1
 
+            # Content unchanged since last index — nothing to re-parse or re-embed.
             if known_hashes.get(walked.path) == walked.sha256:
                 job.files_skipped += 1
                 continue
 
             # One transaction per file, in this order:
-            #   delete stale chunks -> write new chunks -> stamp the hash.
+            #   upsert -> delete stale chunks -> write new chunks -> stamp the hash.
             # The hash is a promise that the chunks exist, so it lands last.
             file = store.upsert(
-                repository_id=repository_id, path=walked.path, language="python",
-                sha256=walked.sha256, line_count=walked.line_count,
+                repository_id=repository_id,
+                path=walked.path,
+                language="python",
+                sha256=walked.sha256,
+                line_count=walked.line_count,
             )
             store.delete_chunks(file.id)
 
-            for chunk in chunk_file(walked.content, walked.path):
-                session.add(chunk)
+            # The parser returns plain dataclasses — it has no idea what a
+            # repository_id is. Mapping to ORM rows happens here, in the layer
+            # that does know.
+            for parsed in chunk_python_file(walked.content, walked.path):
+                session.add(
+                    Chunk(
+                        source_file_id=file.id,
+                        repository_id=repository_id,
+                        symbol_name=parsed.symbol_name,
+                        kind=parsed.kind,
+                        start_line=parsed.start_line,
+                        end_line=parsed.end_line,
+                        content=parsed.content,
+                        embedded_text=parsed.embedded_text,
+                        token_count=parsed.token_count,
+                    )
+                )
                 job.chunks_created += 1
 
             file.content_sha256 = walked.sha256
             job.files_indexed += 1
             session.commit()
-
         removed = store.delete_files_not_in(repository_id, seen_paths)
         logger.info("job %s removed %d deleted files", job_id, removed)
 
