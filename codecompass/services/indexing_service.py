@@ -11,6 +11,8 @@ from codecompass.ingestion.walker import walk_python_files
 from codecompass.models import Chunk, IndexingJob, Repository
 from codecompass.parsing.chunker import chunk_python_file
 from codecompass.repositories.file_store import FileStore
+from codecompass.embedding.client import QuotaExhausted
+from codecompass.services.embedding_service import embed_pending_chunks
 
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,11 @@ def run_indexing_job(job_id: uuid.UUID, repository_id: uuid.UUID) -> None:
             session.commit()
         removed = store.delete_files_not_in(repository_id, seen_paths)
         logger.info("job %s removed %d deleted files", job_id, removed)
+        job.status = "embedding"
+        session.commit()
+
+        embedded = embed_pending_chunks(session, repository_id)
+        logger.info("job %s embedded %d chunks", job_id, embedded)
 
         repo.last_indexed_commit = commit_sha
         job.status = "ready"
@@ -109,6 +116,10 @@ def run_indexing_job(job_id: uuid.UUID, repository_id: uuid.UUID) -> None:
     except CloneFailed as exc:
         # An expected failure with a message worth showing the user.
         _fail(session, job_id, str(exc))
+    except QuotaExhausted as exc:
+        # Honest status: the work isn't done, but re-POSTing resumes from
+        # exactly the chunks that are still NULL.
+        _fail(session, job_id, f"{exc} Re-run to resume.")
     except Exception as exc:
         # Unexpected: log the traceback for us, store a short reason for them.
         logger.exception("indexing job %s failed", job_id)

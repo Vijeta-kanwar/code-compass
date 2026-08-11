@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # hard constraint from pgvector, not a cost optimisation.
     embedding_dimensions: int = 768
     log_level: str = "INFO"
+    embedding_batch_size: int = 50
+    embedding_max_retries: int = 7
+    embedding_batch_delay_seconds: float = 2.0
 
     #Repo settings
     clone_dir: str = "/tmp/codecompass"
