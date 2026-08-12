@@ -64,12 +64,11 @@ def embed_pending_chunks(
         if not usable:
             continue
 
-        embedded_total += _embed_batch(
-            session,
-            usable,
-            poisoned,
-        )
+        embedded_total += _embed_batch(session, usable, poisoned)
 
+        # Pace ourselves rather than sprinting into a 429 and backing off —
+        # free-tier quota is the binding constraint here, not throughput.
+        time.sleep(settings.embedding_batch_delay_seconds)
     return embedded_total
 
 
@@ -97,10 +96,7 @@ def _embed_batch(session: Session, batch: list, poisoned: set[uuid.UUID]) -> int
         # Commit per batch, not at the end: a crash costs one batch of API calls
         # rather than the entire repository's worth.
         session.commit()
-        embedded_count = len(batch)
-        embedded_total += embedded_count
-
-        time.sleep(settings.embedding_batch_delay_seconds)
+        return len(batch)
 
     except QuotaExhausted:
         # Not our problem to solve here — the caller decides what an exhausted

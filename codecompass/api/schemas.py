@@ -22,3 +22,10 @@ class JobResponse(BaseModel):
     chunks_created: int
     created_at: datetime
     finished_at: datetime | None
+
+class SearchResult(BaseModel):
+    symbol_name: str | None
+    file_path: str
+    start_line: int
+    end_line: int
+    distance: float
