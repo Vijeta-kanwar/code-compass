@@ -16,9 +16,12 @@ class Settings(BaseSettings):
     # hard constraint from pgvector, not a cost optimisation.
     embedding_dimensions: int = 768
     log_level: str = "INFO"
-    embedding_batch_size: int = 50
-    embedding_max_retries: int = 7
-    embedding_batch_delay_seconds: float = 2.0
+    embedding_batch_size: int = 5
+    # One request per chunk, and the cap is 100 RPM — so 20 chunks needs at
+    # least 12s of headroom. 20s keeps us well clear, since every 429 retry
+    # spends a request from the daily allowance that we never get back.
+    embedding_batch_delay_seconds: float = 15.0
+    embedding_max_retries: int = 4
 
     #Repo settings
     clone_dir: str = "/tmp/codecompass"

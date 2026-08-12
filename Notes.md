@@ -18,3 +18,5 @@
 - Oversized chunks are not split (chunker pass 6 skipped).
 - Typing-protocol stubs with empty bodies get embedded but can never answer
   anything. Candidate filter — measure on Day 9 before adding it.
+
+
