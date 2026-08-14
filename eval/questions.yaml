@@ -1,0 +1,86 @@
+- q: "how are rate limits handled when generating embeddings"
+  files:
+    - "codecompass/embedding/client.py"
+
+- q: "what happens when the embedding API runs out of quota"
+  files:
+    - "codecompass/embedding/client.py"
+
+- q: "how does the embedding client retry failed requests"
+  files:
+    - "codecompass/embedding/client.py"
+
+- q: "where does a chunk's start and end line get calculated"
+  files:
+    - "codecompass/parsing/chunker.py"
+
+- q: "how are source files divided into chunks before embedding"
+  files:
+    - "codecompass/parsing/chunker.py"
+
+- q: "what information is stored along with each code chunk"
+  files:
+    - "codecompass/parsing/chunker.py"
+
+- q: "how do we avoid embedding the same file again when it hasn't changed"
+  files:
+    - "codecompass/services/indexing_service.py"
+    - "codecompass/ingestion/walker.py"
+
+- q: "what happens to an embedding job that was interrupted or left unfinished"
+  files:
+    - "codecompass/services/indexing_service.py"
+    - "codecompass/main.py"
+
+- q: "how does the system resume embedding after a partial failure"
+  files:
+    - "codecompass/services/indexing_service.py"
+    - "codecompass/services/embedding_service.py"
+
+- q: "how are the most relevant code chunks ranked"
+  files:
+    - "codecompass/repositories/chunk_store.py"
+
+- q: "where is the vector database queried during code search"
+  files:
+    - "codecompass/repositories/chunk_store.py"
+
+- q: "how are embeddings stored and associated with source code"
+  files:
+    - "codecompass/repositories/chunk_store.py"
+    - "codecompass/models.py"
+
+- q: "what is QuotaExhausted and where is it handled"
+  files:
+    - "codecompass/embedding/client.py"
+
+- q: "how is a repository URL validated before cloning"
+  files:
+    - "codecompass/services/repo_url.py"
+
+- q: "what stops two indexing jobs running on the same repository at once"
+  files:
+    - "codecompass/models.py"
+
+- q: "how does the API report that indexing is still in progress"
+  files:
+    - "codecompass/api/repositories.py"
+    - "codecompass/api/schemas.py"
+
+- q: "which files get skipped when walking a repository"
+  files:
+    - "codecompass/ingestion/walker.py"
+
+- q: "how does the system decide which pieces of a source file are worth embedding"
+  files:
+    - "codecompass/parsing/chunker.py"
+
+- q: "what happens from the moment a file needs embedding until its vector is stored"
+  files:
+    - "codecompass/services/indexing_service.py"
+    - "codecompass/embedding/client.py"
+
+- q: "how does CodeCompass turn a user's question into relevant code results"
+  files:
+    - "codecompass/services/search_service.py"
+    - "codecompass/repositories/chunk_store.py"
