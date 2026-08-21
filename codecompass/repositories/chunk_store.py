@@ -44,7 +44,9 @@ class ChunkStore:
         query_vector: list[float],
         limit: int = 10,
     ) -> list[tuple[Chunk, float]]:
-        """Nearest chunks by cosine distance, closest first."""
+        """Nearest chunks by cosine distance, with at most 2 chunks per file."""
+
+        candidate_limit = limit * 3
 
         stmt = (
             select(
@@ -58,7 +60,25 @@ class ChunkStore:
                 Chunk.embedding.is_not(None),
             )
             .order_by("distance")
-            .limit(limit)
+            .limit(candidate_limit)
         )
 
-        return list(self._session.execute(stmt).unique().all())
+        rows = self._session.execute(stmt).unique().all()
+
+        results = []
+        file_counts = {}
+
+        for chunk, distance in rows:
+            file_id = chunk.source_file_id
+            count = file_counts.get(file_id, 0)
+
+            if count >= 2:
+                continue
+
+            results.append((chunk, distance))
+            file_counts[file_id] = count + 1
+
+            if len(results) == limit:
+                break
+
+        return results
