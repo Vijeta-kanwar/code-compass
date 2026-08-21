@@ -45,3 +45,20 @@ Candidates to measure on Day 9:
 1. exclude tests from results by default
 2. drop or down-weight import-only module chunks
 3. lexical search + RRF
+
+## Retrieval tuning, measured 2026-08-21 (125 chunks, 34 files, 20 golden questions)
+
+| Change | recall@5 | MRR@5 |
+|---|---|---|
+| baseline (vector only)        | 85%  | 0.522 |
+| exclude dead app.py from index| 95%  | 0.522 |
+| + dedup, max 2 chunks/file    | 95%  | 0.522 |
+| + dedup, max 1 chunk/file     | 95%  | 0.546 |
+
+Notes on interpretation:
+- The 85% -> 95% step is NOT a clean before/after: search_service.py was
+  written between the two runs, so the codebase changed as well as the index.
+- max_per_file=2 was inert — few queries returned 3+ chunks from one file.
+  Only the strict cap moved the metric.
+- Dedup raises MRR without raising recall, which is the expected shape: it
+  promotes distinct files rather than finding new ones.

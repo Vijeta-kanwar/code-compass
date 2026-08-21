@@ -43,40 +43,37 @@ class ChunkStore:
         repository_id: uuid.UUID,
         query_vector: list[float],
         limit: int = 10,
+        max_per_file: int = 1,
     ) -> list[tuple[Chunk, float]]:
-        """Nearest chunks by cosine distance, with at most 2 chunks per file."""
+        """Nearest chunks by cosine distance, closest first.
 
-        candidate_limit = limit * 3
-
+        Over-fetches, then caps how many chunks any one file may occupy: three
+        chunks from the same file crowd out three other files that might have
+        held the answer.
+        """
         stmt = (
             select(
                 Chunk,
                 Chunk.embedding.cosine_distance(query_vector).label("distance"),
             )
-            .join(Chunk.source_file)
-            .options(contains_eager(Chunk.source_file))
             .where(
                 Chunk.repository_id == repository_id,
                 Chunk.embedding.is_not(None),
             )
             .order_by("distance")
-            .limit(candidate_limit)
+            .limit(limit * 4)
         )
 
-        rows = self._session.execute(stmt).unique().all()
+        results: list[tuple[Chunk, float]] = []
+        per_file: dict[uuid.UUID, int] = {}
 
-        results = []
-        file_counts = {}
-
-        for chunk, distance in rows:
-            file_id = chunk.source_file_id
-            count = file_counts.get(file_id, 0)
-
-            if count >= 2:
+        for chunk, distance in self._session.execute(stmt).all():
+            seen = per_file.get(chunk.source_file_id, 0)
+            if seen >= max_per_file:
                 continue
 
+            per_file[chunk.source_file_id] = seen + 1
             results.append((chunk, distance))
-            file_counts[file_id] = count + 1
 
             if len(results) == limit:
                 break
