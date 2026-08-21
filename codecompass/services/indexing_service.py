@@ -44,7 +44,12 @@ def run_indexing_job(job_id: uuid.UUID, repository_id: uuid.UUID) -> None:
         job.commit_sha = commit_sha
 
         # Idempotency: same commit as last time means there is nothing to do.
-        if repo.last_indexed_commit == commit_sha:
+        # Idempotency: same commit as last time means there is nothing to do
+        # only when the indexed chunks still exist.
+        has_chunks = session.query(Chunk.id).filter(
+            Chunk.repository_id == repository_id
+        ).first() is not None
+        if repo.last_indexed_commit == commit_sha and has_chunks:
             job.status = "ready"
             job.finished_at = datetime.now(timezone.utc)
             session.commit()

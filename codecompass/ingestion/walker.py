@@ -5,8 +5,21 @@ from pathlib import Path
 from codecompass.config import get_settings
 
 SKIP_DIRS = {
-    ".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache",
-    ".pytest_cache", "dist", "build", ".tox", "site-packages",
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    "dist",
+    "build",
+    ".tox",
+    "site-packages",
+}
+
+SKIP_FILES = {
+    "app.py",
 }
 
 
@@ -23,10 +36,15 @@ def walk_python_files(root: Path):
     settings = get_settings()
 
     for path in sorted(root.rglob("*.py")):
+        if path.name in SKIP_FILES:
+            continue
+
         if any(part in SKIP_DIRS for part in path.parts):
             continue
+
         if path.stat().st_size > settings.max_file_bytes:
             continue
+
         try:
             content = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
@@ -36,8 +54,6 @@ def walk_python_files(root: Path):
         yield WalkedFile(
             path=str(path.relative_to(root)),
             content=content,
-            # Hash the content, not the mtime — a fresh clone has fresh mtimes
-            # on every file, which would defeat incremental indexing entirely.
             sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
             line_count=content.count("\n") + 1,
         )

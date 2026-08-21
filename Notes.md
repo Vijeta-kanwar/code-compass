@@ -20,3 +20,45 @@
   anything. Candidate filter — measure on Day 9 before adding it.
 
 
+## Vector-only retrieval, observed 2026-08-12 (116 chunks, own repo)
+
+"how are rate limits handled"
+  - correct answer (embed_documents retry loop) ranked 6th
+  - ranks 2-3 were import-only module chunks, matching on the filename in
+    their context header
+  - spread 0.354-0.411
+
+"QuotaExhausted" (exact identifier)
+  - rank 1, distance 0.240, clear gap to rank 2 (0.337)
+  - CloneFailed ranked 3rd: structurally identical two-line exception class.
+    Semantic similarity working correctly and being unhelpful.
+  - NOTE: the expected failure of vector search on identifiers did NOT
+    reproduce at this scale — rare tokens dominate small chunks.
+
+"where are chunk line numbers calculated"
+  - 4 of top 10 were test functions; the real answer ranked 3rd and 4th
+  - test names paraphrase natural-language questions, so they embed well and
+    contain no implementation
+  - spread 0.269-0.325
+
+Candidates to measure on Day 9:
+1. exclude tests from results by default
+2. drop or down-weight import-only module chunks
+3. lexical search + RRF
+
+## Retrieval tuning, measured 2026-08-21 (125 chunks, 34 files, 20 golden questions)
+
+| Change | recall@5 | MRR@5 |
+|---|---|---|
+| baseline (vector only)        | 85%  | 0.522 |
+| exclude dead app.py from index| 95%  | 0.522 |
+| + dedup, max 2 chunks/file    | 95%  | 0.522 |
+| + dedup, max 1 chunk/file     | 95%  | 0.546 |
+
+Notes on interpretation:
+- The 85% -> 95% step is NOT a clean before/after: search_service.py was
+  written between the two runs, so the codebase changed as well as the index.
+- max_per_file=2 was inert — few queries returned 3+ chunks from one file.
+  Only the strict cap moved the metric.
+- Dedup raises MRR without raising recall, which is the expected shape: it
+  promotes distinct files rather than finding new ones.
