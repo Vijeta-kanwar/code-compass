@@ -23,6 +23,24 @@ class JobResponse(BaseModel):
     created_at: datetime
     finished_at: datetime | None
 
+
+class AskRequest(BaseModel):
+    question: str
+
+
+class Citation(BaseModel):
+    n: int
+    file_path: str
+    start_line: int
+    end_line: int
+
+
+class AskResponse(BaseModel):
+    answer: str
+    citations: list[Citation]
+    latency_ms: int
+
+
 class SearchResult(BaseModel):
     symbol_name: str | None
     file_path: str

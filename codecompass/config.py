@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     database_url: str
     google_api_key: str
 
-    llm_model: str = "gemini-2.5-flash"
+    llm_model: str = "gemini-3.6-flash"
     embedding_model: str = "gemini-embedding-001"
     # 768 rather than the model's native 3072 — see the note below; this is a
     # hard constraint from pgvector, not a cost optimisation.
@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     clone_timeout_seconds: int = 300
     max_repo_mb: int = 200
     max_file_bytes: int = 1_000_000      # skip minified bundles and vendored blobs
+
+    answer_top_k: int = 5
+    answer_context_token_budget: int = 6000
+    answer_max_distance: float = 0.45
 
     @property
     def git_host_allowlist(self) -> set[str]:
