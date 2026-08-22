@@ -62,3 +62,11 @@ Notes on interpretation:
   Only the strict cap moved the metric.
 - Dedup raises MRR without raising recall, which is the expected shape: it
   promotes distinct files rather than finding new ones.
+
+
+  ## Distance threshold, measured 2026-08-22
+Out-of-scope query ("payment processing"): top-5 distances 0.427-0.445,
+spread 0.018. Real queries: top hit ~0.24, clear gap to rank 2.
+Threshold of 0.45 was too loose — noise passed it and cost an LLM call.
+Lowered to 0.40. Spread across top-k may be a better signal than the
+absolute value; not yet implemented.

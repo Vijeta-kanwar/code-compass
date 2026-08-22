@@ -3,20 +3,23 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from codecompass.api.schemas import CreateRepositoryRequest, JobResponse
-from codecompass.db import get_session
-from codecompass.repositories.job_store import JobStore
-from codecompass.repositories.repository_store import RepositoryStore
-from codecompass.services.indexing_service import run_indexing_job
-from codecompass.services.repo_url import InvalidRepositoryUrl, normalize
-
-from codecompass.embedding.client import QuotaExhausted
-from codecompass.services.search_service import search_repository
 from codecompass.api.schemas import (
+    AskRequest,
+    AskResponse,
+    Citation,
     CreateRepositoryRequest,
     JobResponse,
     SearchResult,
 )
+from codecompass.db import get_session
+from codecompass.embedding.client import QuotaExhausted
+from codecompass.repositories.job_store import JobStore
+from codecompass.repositories.repository_store import RepositoryStore
+from codecompass.services.answer_service import answer_question
+from codecompass.services.indexing_service import run_indexing_job
+from codecompass.services.repo_url import InvalidRepositoryUrl, normalize
+from codecompass.services.search_service import search_repository
+
 
 router = APIRouter(tags=["repositories"])
 
@@ -142,3 +145,48 @@ def search(
         )
         for chunk, distance in results
     ]
+
+@router.post(
+    "/repositories/{repository_id}/ask",
+    response_model=AskResponse,
+)
+def ask(
+    repository_id: uuid.UUID,
+    body: AskRequest,
+    session: Session = Depends(get_session),
+) -> AskResponse:
+
+    repo = RepositoryStore(session).get(repository_id)
+
+    if repo is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No such repository. Index it first.",
+        )
+
+    if not body.question.strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Question must not be empty.",
+        )
+
+    try:
+        result = answer_question(
+            session=session,
+            repository_id=repository_id,
+            question=body.question,
+        )
+    except QuotaExhausted as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            str(exc),
+        ) from exc
+
+    return AskResponse(
+        answer=result.answer,
+        citations=[
+            Citation(**citation)
+            for citation in result.citations
+        ],
+        latency_ms=result.latency_ms,
+    )
