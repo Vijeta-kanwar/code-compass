@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     
     database_url: str
     google_api_key: str
+    api_key: str = ""
 
     llm_model: str = "gemini-3.6-flash"
     embedding_model: str = "gemini-embedding-001"
