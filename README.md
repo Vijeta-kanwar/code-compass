@@ -1,6 +1,7 @@
+
 # Code Compass
 
-Semantic search for Python codebases. Index a repository, ask a question in natural language, and get back the files and functions most relevant to your question.
+Semantic search and grounded question answering for Python codebases. Index a repository, ask a question in natural language, and get back a grounded answer with verifiable file and line citations.
 
 ## Why Code Compass?
 
@@ -48,7 +49,7 @@ docker compose up -d
 alembic upgrade head
 ```
 
-Index a repository:
+### Index a repository
 
 ```bash
 curl -X POST http://localhost:8000/repositories \
@@ -62,11 +63,14 @@ The response returns a job ID and a repository ID. Indexing runs in the backgrou
 curl http://localhost:8000/jobs/<JOB_ID>
 ```
 
-Once the job reports `ready`, search the repository:
+### Search
+
+Once the job reports `ready`:
 
 ```bash
 curl "http://localhost:8000/repositories/<REPO_ID>/search?q=how+are+rate+limits+handled"
 ```
+
 
 ```json
 [
@@ -96,19 +100,67 @@ curl "http://localhost:8000/repositories/<REPO_ID>/search?q=how+are+rate+limits+
 
 Results are ordered by cosine distance, so **lower `distance` means a closer match**.
 
-## Architecture
+### Ask a question
 
-The indexing and retrieval pipeline is intentionally straightforward:
+```bash
+curl -X POST \
+  "http://localhost:8000/repositories/<REPO_ID>/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How does the system create embeddings?"}'
+```
+
+```json
+{
+  "answer": "Based on the provided code excerpts, the system creates embeddings using Google's Gemini API (`genai.Client`)... [1] ... [2]",
+  "citations": [
+    {
+      "n": 1,
+      "file_path": "codecompass/embedding/client.py",
+      "start_line": 79,
+      "end_line": 104
+    },
+    {
+      "n": 2,
+      "file_path": "codecompass/services/embedding_service.py",
+      "start_line": 1,
+      "end_line": 13
+    }
+  ],
+  "latency_ms": 7546
+}
+```
+
+If the repository does not contain the answer, Code Compass refuses rather than relying on general knowledge:
+
+```json
+{
+  "answer": "The provided code excerpts do not contain any information about a payment processing system.",
+  "citations": [],
+  "latency_ms": 4559
+}
+```
+
+## Architecture
 
 ```
 clone → walk → hash → AST chunk → embed → pgvector
                                              ↓
                              question → embed → search → ranked chunks
+                                                         ↓
+                                                  context builder
+                                                         ↓
+                                                        LLM
+                                                         ↓
+                                                  grounded answer
+                                                         ↓
+                                                      citations
 ```
 
 When indexing, Code Compass clones the repository, walks its Python files, hashes their contents, and parses them into AST-based chunks. Each chunk is embedded and stored in PostgreSQL using pgvector.
 
 When a user asks a question, the question is embedded using the same embedding model. The resulting vector is compared against the stored vectors and the closest code chunks are returned.
+
+Retrieved chunks are placed into a bounded context window and passed to the LLM. The model is instructed to answer only from those excerpts, cite the numbered excerpts it uses, and refuse when the provided context does not contain the answer.
 
 ### Project layers
 
@@ -118,7 +170,7 @@ When a user asks a question, the question is embedded using the same embedding m
 | `services/` | Application logic and workflows |
 | `repositories/` | Database access and queries |
 | `parsing/` | Python parsing and AST-based chunking |
-| `embedding/` | Embedding provider integration |
+| `embedding/` | Embedding and LLM provider integration |
 | `ingestion/` | Repository cloning and file walking |
 | `models.py` | Database models |
 
@@ -161,7 +213,7 @@ content       → original source code, byte for byte
 
 **Reasoning:** If a file hasn't changed, there's no reason to parse and embed it again. Hashing makes repeated indexing much cheaper. Hashing content rather than modification time matters here — a fresh clone gives every file a new mtime.
 
-**Tradeoff:** The stored hash is a claim that chunks exist, so it's written last in the same transaction as the chunks it vouches for.
+**Tradeoff:** The stored hash is a claim that chunks exist, so it's written last in the same transaction as the chunks it vouches for. The idempotency check also verifies that chunks still exist, so a repository whose index was cleared re-indexes rather than reporting itself already done.
 
 ### 768-dimensional embeddings
 
@@ -187,6 +239,16 @@ content       → original source code, byte for byte
 
 **Tradeoff:** An in-process job dies if the API restarts. A startup reaper marks such jobs failed so they don't block the repository, but the real fix is a worker backed by a queue.
 
+### Grounded answer generation
+
+**Decision:** Give the model only retrieved code excerpts and require numbered citations for claims.
+
+**Reasoning:** The model should answer questions about the specific codebase, not fill gaps with general knowledge. It is instructed to refuse when the supplied excerpts do not contain the answer.
+
+The model cites numbered excerpts such as `[1]` and `[2]`. Code Compass maps those numbers back to the real file paths and line ranges before returning the response. This prevents the model from inventing arbitrary file paths or line numbers.
+
+**Tradeoff:** Answer quality is bounded by retrieval quality. If the relevant code is not retrieved, the system may refuse even when the repository contains the answer.
+
 ## Concepts
 
 - **Content-addressed indexing** — file contents are hashed so unchanged files can be identified and skipped on later runs.
@@ -194,6 +256,7 @@ content       → original source code, byte for byte
 - **Recall@5** — the percentage of evaluation questions where at least one expected file appears in the top five results.
 - **MRR@5** — how high the first relevant result appears. A hit at rank 1 contributes more than one at rank 5.
 - **Vector search** — code chunks and questions become vectors; retrieval returns the chunks closest to the question vector.
+- **Grounding** — the model may only use the excerpts supplied to it, and must say so when they don't contain the answer.
 
 ## Results
 
@@ -219,7 +282,7 @@ One caveat: the 85% → 95% step isn't a perfectly controlled comparison, becaus
 - **Oversized chunks** — very large AST nodes aren't automatically split yet.
 - **Embedding quotas** — free-tier API limits shaped several implementation and testing decisions.
 - **Small evaluation set** — 20 questions catch obvious retrieval problems but don't support strong statistical claims.
-- **Retrieval only** — Code Compass returns relevant code chunks. It doesn't yet generate a natural-language answer from them.
+- **Retrieval quality** — answer quality is bounded by the quality of retrieved context. Threshold tuning remains an area for hardening.
 
 ## Running Tests
 
@@ -251,8 +314,20 @@ code-compass/
 
 ## Status
 
-**Working:** repository indexing, incremental indexing, AST-based chunking, embeddings, pgvector search, per-file result deduplication, and retrieval evaluation.
+**Working:** repository indexing, incremental indexing, AST-based chunking, embeddings, pgvector search, per-file result deduplication, retrieval evaluation, grounded natural-language answers, citation mapping, and query logging.
 
-**Current result:** 95% Recall@5 / 0.546 MRR@5 on the 20-question evaluation set.
+**Current result:** 95% Recall@5 / 0.546 MRR@5 on the 20-question retrieval evaluation set.
 
-**Next:** natural-language answer generation, a durable worker/queue for indexing, better handling of oversized chunks, and a larger evaluation set.
+**Answering:** working end-to-end through `POST /repositories/{repository_id}/ask`, with grounded answers and verifiable file/line citations.
+
+**Next:** hardening retrieval and answer quality, a durable worker/queue for indexing, better handling of oversized chunks, and a larger evaluation set.
+
+
+## Q18 — persistent retrieval miss
+"how does the system decide which pieces of a source file are worth embedding"
+consistently retrieves walker.py over chunker.py. Both implement selection
+logic about what gets embedded — walker at file granularity, chunker at
+symbol granularity. The distinguishing word is "pieces".
+This is the case lexical search would fix: "chunk" is frequent in chunker.py
+and near-absent in walker.py. Kept as a known limitation rather than tuned
+around — one miss in twenty means the eval can still fail.

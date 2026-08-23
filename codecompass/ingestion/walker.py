@@ -16,6 +16,7 @@ SKIP_DIRS = {
     "build",
     ".tox",
     "site-packages",
+    "eval",
 }
 
 SKIP_FILES = {
