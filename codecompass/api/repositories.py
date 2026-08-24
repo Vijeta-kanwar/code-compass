@@ -91,6 +91,7 @@ def get_job(
 def search(
     repository_id: uuid.UUID,
     q: str,
+    mode: str = "hybrid",
     session: Session = Depends(get_session),
     _: None = Depends(require_api_key),
 ) -> list[SearchResult]:
@@ -114,6 +115,7 @@ def search(
             session=session,
             repository_id=repository_id,
             query=q,
+            mode=mode,
         )
     except QuotaExhausted as exc:
         raise HTTPException(
