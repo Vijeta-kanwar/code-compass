@@ -6,4 +6,4 @@ alembic
 pydantic-settings
 pgvector
 google-genai
-pyyaml
+pyyamlpytest
