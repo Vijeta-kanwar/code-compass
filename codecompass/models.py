@@ -14,6 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
     text,
+    Computed,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -134,7 +135,13 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text)              # raw source
     embedded_text: Mapped[str] = mapped_column(Text)        # what the model actually saw
     token_count: Mapped[int] = mapped_column(Integer, default=0)
-    content_tsv: Mapped[str | None] = mapped_column(TSVECTOR)
+    content_tsv: Mapped[str | None] = mapped_column(
+    TSVECTOR,
+    Computed(
+        "to_tsvector('english'::regconfig, content)",
+        persisted=True,
+    ),
+     )
     # Null until Day 5 embeds it — which is also how a resumed job finds
     # its unfinished work.
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))

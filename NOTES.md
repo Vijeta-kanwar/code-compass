@@ -70,3 +70,28 @@ spread 0.018. Real queries: top hit ~0.24, clear gap to rank 2.
 Threshold of 0.45 was too loose — noise passed it and cost an LLM call.
 Lowered to 0.40. Spread across top-k may be a better signal than the
 absolute value; not yet implemented.
+
+
+
+## Fresh-clone verification
+
+A clean clone exposed several issues that were not visible in the development
+environment, including migrations that could not run against a fresh database
+and a generated PostgreSQL `content_tsv` column that SQLAlchemy attempted to
+write during indexing.
+
+After fixing these issues, a fresh database successfully applied all migrations
+and rebuilt the repository index.
+
+Verification results:
+
+- 152 chunks stored
+- 152/152 chunks embedded
+- Vector Recall@5: 95.0%
+- Vector MRR@5: 0.568
+- Hybrid Recall@5: 95.0%
+- Hybrid MRR@5: 0.543
+- Citation validity: 100%
+
+The evaluation also showed that hybrid retrieval did not improve over the
+vector baseline on the current 20-question evaluation set.
