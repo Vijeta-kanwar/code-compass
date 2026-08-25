@@ -79,3 +79,29 @@ class ChunkStore:
                 break
 
         return results
+
+    def search_by_text(
+        self,
+        repository_id: uuid.UUID,
+        query: str,
+        limit: int = 20,
+    ) -> list[tuple[Chunk, float]]:
+        """Keyword matches ranked by ts_rank, best first.
+
+        Higher rank is better here — the opposite of cosine distance.
+        """
+        ts_query = func.plainto_tsquery("english", query)
+        rank = func.ts_rank(Chunk.content_tsv, ts_query).label("rank")
+
+        stmt = (
+            select(Chunk, rank)
+            .where(
+                Chunk.repository_id == repository_id,
+                Chunk.content_tsv.is_not(None),
+                Chunk.content_tsv.op("@@")(ts_query),
+            )
+            .order_by(rank.desc(), Chunk.id)
+            .limit(limit)
+        )
+
+        return list(self._session.execute(stmt).all())

@@ -6,9 +6,7 @@ import yaml
 
 from codecompass.db import SessionLocal
 from codecompass.models import SourceFile
-from codecompass.repositories.chunk_store import ChunkStore
-
-from eval.query_embedding_cache import get_query_embedding
+from codecompass.services.search_service import search_repository
 
 
 TOP_K = 5
@@ -44,7 +42,11 @@ def validate_citation(
     )
 
 
-def evaluate(repository_id: uuid.UUID, api_key: str):
+def evaluate(
+    repository_id: uuid.UUID,
+    api_key: str,
+    mode: str,
+):
     questions = load_questions()
 
     hits = 0
@@ -53,33 +55,37 @@ def evaluate(repository_id: uuid.UUID, api_key: str):
     total_citations = 0
     valid_citations = 0
 
+    print(f"Evaluation mode: {mode}")
+
     with SessionLocal() as session:
-        store = ChunkStore(session)
 
         for i, item in enumerate(questions, start=1):
             question = item["q"]
             expected_files = set(item["files"])
 
             # ---------------------------------------------------------
-            # Existing retrieval evaluation
+            # Retrieval evaluation
             # ---------------------------------------------------------
 
-            query_vector = get_query_embedding(question)
-
-            results = store.search_by_vector(
+            results = search_repository(
+                session=session,
                 repository_id=repository_id,
-                query_vector=query_vector,
+                query=question,
                 limit=TOP_K,
+                mode=mode,
             )
 
             retrieved_files = [
                 chunk.source_file.path
-                for chunk, distance in results
+                for chunk, score in results
             ]
 
             first_correct_rank = None
 
-            for rank, path in enumerate(retrieved_files, start=1):
+            for rank, path in enumerate(
+                retrieved_files,
+                start=1,
+            ):
                 if path in expected_files:
                     first_correct_rank = rank
                     break
@@ -134,7 +140,6 @@ def evaluate(repository_id: uuid.UUID, api_key: str):
                     f"ASK ERROR: HTTP {response.status_code}"
                 )
                 print(response.text)
-
                 continue
 
             data = response.json()
@@ -178,20 +183,15 @@ def evaluate(repository_id: uuid.UUID, api_key: str):
                 "VALID" if question_valid else "INVALID",
             )
 
+    # -------------------------------------------------------------
+    # Final metrics
+    # -------------------------------------------------------------
+
     recall = hits / len(questions)
 
     mrr = (
         sum(reciprocal_ranks)
         / len(reciprocal_ranks)
-    )
-
-    if total_citations == 0:
-          print("Citation validity: n/a")
-    else:
-          citation_rate = valid_citations / total_citations
-          print(
-        f"Citation validity: "
-        f"{valid_citations}/{total_citations} = {citation_rate:.1%}"
     )
 
     print("\n" + "=" * 60)
@@ -205,28 +205,46 @@ def evaluate(repository_id: uuid.UUID, api_key: str):
         f"MRR@{TOP_K}: {mrr:.3f}"
     )
 
-    print(
-        f"Citation validity: "
-        f"{valid_citations}/{total_citations} "
-        f"= {citation_validity:.1%}"
-    )
+    if total_citations == 0:
+        print("Citation validity: n/a")
+    else:
+        citation_rate = (
+            valid_citations / total_citations
+        )
+
+        print(
+            f"Citation validity: "
+            f"{valid_citations}/{total_citations} "
+            f"= {citation_rate:.1%}"
+        )
 
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         print(
             "Usage: "
             "python eval/run_eval.py "
-            "<repository_id> <api_key>"
+            "<repository_id> <api_key> <mode>"
+        )
+        print(
+            "mode must be 'vector' or 'hybrid'"
         )
         sys.exit(1)
 
     repository_id = uuid.UUID(sys.argv[1])
     api_key = sys.argv[2]
+    mode = sys.argv[3]
+
+    if mode not in {"vector", "hybrid"}:
+        print(
+            "Mode must be 'vector' or 'hybrid'"
+        )
+        sys.exit(1)
 
     evaluate(
         repository_id=repository_id,
         api_key=api_key,
+        mode=mode,
     )

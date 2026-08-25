@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import TSVECTOR
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -115,7 +116,7 @@ class SourceFile(Base):
 
 class Chunk(Base):
     __tablename__ = "chunk"
-
+     
     id: Mapped[uuid.UUID] = _pk()
     source_file_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("source_file.id", ondelete="CASCADE")
@@ -133,7 +134,7 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text)              # raw source
     embedded_text: Mapped[str] = mapped_column(Text)        # what the model actually saw
     token_count: Mapped[int] = mapped_column(Integer, default=0)
-
+    content_tsv: Mapped[str | None] = mapped_column(TSVECTOR)
     # Null until Day 5 embeds it — which is also how a resumed job finds
     # its unfinished work.
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
