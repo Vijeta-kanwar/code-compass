@@ -21,6 +21,8 @@ SKIP_DIRS = {
 
 SKIP_FILES = {
     "app.py",
+    "setup.py",
+    "conf.py",
 }
 
 
