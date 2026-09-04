@@ -19,10 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    # Empty on purpose. The HNSW index is already created by the preceding
+    # 9b4142dde3f7 migration. This revision is retained to preserve the
+    # existing Alembic migration history.
     pass
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    # Empty on purpose. The HNSW index is owned by 9b4142dde3f7, so this
+    # revision must not attempt to drop it.
     pass
