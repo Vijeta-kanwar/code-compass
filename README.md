@@ -280,6 +280,9 @@ The retrieval evaluation contains 20 golden questions covering different parts o
 | Exclude `app.py` | 95% | 0.522 |
 | Dedup — max 2 chunks/file | 95% | 0.522 |
 | Dedup — max 1 chunk/file | 95% | 0.546 |
+| Hybrid retrieval | No improvement | No improvement |
+
+Hybrid retrieval was also evaluated by combining vector and lexical search with reciprocal rank fusion. It produced no measurable improvement over the vector-search configuration, so vector retrieval remains the default.
 
 The most interesting result was the deduplication experiment. Recall stayed at 95% while MRR improved from 0.522 to 0.546 — deduplication didn't help the system discover additional answers, it moved already-relevant results higher in the ranking.
 
@@ -295,6 +298,15 @@ One caveat: the 85% → 95% step isn't a perfectly controlled comparison, becaus
 - **Embedding quotas** — free-tier API limits shaped several implementation and testing decisions.
 - **Small evaluation set** — 20 questions catch obvious retrieval problems but don't support strong statistical claims.
 - **Retrieval quality** — answer quality is bounded by the quality of retrieved context. Threshold tuning remains an area for hardening.
+
+### Q18 — persistent retrieval miss
+"how does the system decide which pieces of a source file are worth embedding"
+consistently retrieves walker.py over chunker.py. Both implement selection
+logic about what gets embedded — walker at file granularity, chunker at
+symbol granularity. The distinguishing word is "pieces".
+This is the case lexical search would fix: "chunk" is frequent in chunker.py
+and near-absent in walker.py. Kept as a known limitation rather than tuned
+around — one miss in twenty means the eval can still fail.
 
 ## Running Tests
 
@@ -333,13 +345,3 @@ code-compass/
 **Answering:** working end-to-end through `POST /repositories/{repository_id}/ask`, with grounded answers and verifiable file/line citations.
 
 **Next:** hardening retrieval and answer quality, a durable worker/queue for indexing, better handling of oversized chunks, and a larger evaluation set.
-
-
-## Q18 — persistent retrieval miss
-"how does the system decide which pieces of a source file are worth embedding"
-consistently retrieves walker.py over chunker.py. Both implement selection
-logic about what gets embedded — walker at file granularity, chunker at
-symbol granularity. The distinguishing word is "pieces".
-This is the case lexical search would fix: "chunk" is frequent in chunker.py
-and near-absent in walker.py. Kept as a known limitation rather than tuned
-around — one miss in twenty means the eval can still fail.
